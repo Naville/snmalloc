@@ -45,12 +45,25 @@ extern "C"
   {
     return ThreadAlloc::get_noncachable()->alloc(size);
   }
+  #ifdef _WIN32
+  SNMALLOC_EXPORT void* SNMALLOC_NAME_MANGLE(_malloc_base)(size_t size)
+  {
+    return ThreadAlloc::get_noncachable()->alloc(size);
+  }
+  #endif
 
   SNMALLOC_EXPORT void SNMALLOC_NAME_MANGLE(free)(void* ptr)
   {
     SNMALLOC_NAME_MANGLE(check_start)(ptr);
     ThreadAlloc::get_noncachable()->dealloc(ptr);
   }
+  #ifdef _WIN32
+  SNMALLOC_EXPORT void SNMALLOC_NAME_MANGLE(_free_base)(void* ptr)
+  {
+    SNMALLOC_NAME_MANGLE(check_start)(ptr);
+    ThreadAlloc::get_noncachable()->dealloc(ptr);
+  }
+  #endif
 
   SNMALLOC_EXPORT void SNMALLOC_NAME_MANGLE(cfree)(void* ptr)
   {
@@ -68,13 +81,38 @@ extern "C"
     }
     return ThreadAlloc::get_noncachable()->alloc<ZeroMem::YesZero>(sz);
   }
-
+  #ifdef _WIN32
+  SNMALLOC_EXPORT void* SNMALLOC_NAME_MANGLE(_calloc_base)(size_t nmemb, size_t size)
+  {
+    bool overflow = false;
+    size_t sz = bits::umul(size, nmemb, overflow);
+    if (overflow)
+    {
+      errno = ENOMEM;
+      return nullptr;
+    }
+    return ThreadAlloc::get_noncachable()->alloc<ZeroMem::YesZero>(sz);
+  }
+  #endif
   SNMALLOC_EXPORT
   size_t SNMALLOC_NAME_MANGLE(malloc_usable_size)(
     MALLOC_USABLE_SIZE_QUALIFIER void* ptr)
   {
     return Alloc::alloc_size(ptr);
   }
+#ifdef _WIN32
+
+  SNMALLOC_EXPORT
+  size_t SNMALLOC_NAME_MANGLE(_msize)(void* ptr)
+  {
+    return Alloc::alloc_size(ptr);
+  }
+  SNMALLOC_EXPORT
+  size_t SNMALLOC_NAME_MANGLE(_msize_base)(void* ptr) noexcept
+  {
+    return _msize(ptr);
+  }
+#endif
 
   SNMALLOC_EXPORT void* SNMALLOC_NAME_MANGLE(realloc)(void* ptr, size_t size)
   {
@@ -118,7 +156,12 @@ extern "C"
     }
     return p;
   }
-
+#ifdef _WIN32
+  SNMALLOC_EXPORT void* SNMALLOC_NAME_MANGLE(_realloc_base)(void* ptr, size_t size)
+  {
+    return realloc(ptr,size);
+  }
+#endif
 #if !defined(__FreeBSD__) && !defined(__OpenBSD__)
   SNMALLOC_EXPORT void*
     SNMALLOC_NAME_MANGLE(reallocarray)(void* ptr, size_t nmemb, size_t size)
